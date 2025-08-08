@@ -1,0 +1,1175 @@
+import React, { useState, useMemo } from 'react';
+import { X, Plus, BarChart3, TrendingUp, Users, DollarSign, Target, Calendar, Edit, Trash2, StopCircle, Search, Download, Upload, AlertCircle } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
+
+const EnhancedStaffingTracker = () => {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [assignments, setAssignments] = useState([
+    {
+      id: 1,
+      clientName: "South Coast ESD",
+      employeeName: "Amanda Watson",
+      recruiter: "Scott Martindale",
+      accountManager: "Kevin Cano",
+      specialty: "Special Education Teacher",
+      startDate: "2025-08-27",
+      endDate: "2026-06-13",
+      billRate: 118,
+      weeklyHours: 40,
+      gpmPercent: 17.92,
+      w2Rate: 85,
+      weeklyStipend: 400,
+      status: "active",
+      notes: "High-performing educator with excellent client feedback"
+    },
+    {
+      id: 2,
+      clientName: "Riverside DOE",
+      employeeName: "John Quinteros",
+      recruiter: "Andrew Temple",
+      accountManager: "Sarah Boggan",
+      specialty: "Speech Language Pathologist",
+      startDate: "2025-08-06",
+      endDate: "2026-05-29",
+      billRate: 120,
+      weeklyHours: 37.5,
+      gpmPercent: 25.06,
+      w2Rate: 80,
+      weeklyStipend: 350,
+      status: "active",
+      notes: "Specialized in pediatric speech therapy"
+    },
+    {
+      id: 3,
+      clientName: "Watertown ISD",
+      employeeName: "Thu Rain",
+      recruiter: "Kevin Cano",
+      accountManager: "Scott Martindale",
+      specialty: "OT",
+      startDate: "2025-09-02",
+      endDate: "2026-06-20",
+      billRate: 135,
+      weeklyHours: 37.5,
+      gpmPercent: 19.68,
+      w2Rate: 95,
+      weeklyStipend: 500,
+      status: "active",
+      notes: "Occupational therapy specialist with IEP experience"
+    }
+  ]);
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterSpecialty, setFilterSpecialty] = useState('all');
+  const [selectedTimePeriod, setSelectedTimePeriod] = useState('weekly');
+  const [selectedWeek, setSelectedWeek] = useState('');
+  const [weeklyActuals, setWeeklyActuals] = useState({});
+  const [showForm, setShowForm] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState(null);
+  const [showEndAssignmentModal, setShowEndAssignmentModal] = useState(false);
+  const [endAssignmentData, setEndAssignmentData] = useState({
+    assignmentId: null,
+    endDate: '',
+    reason: ''
+  });
+
+  const [newAssignment, setNewAssignment] = useState({
+    clientName: '',
+    employeeName: '',
+    recruiter: '',
+    accountManager: '',
+    specialty: '',
+    startDate: '',
+    endDate: '',
+    billRate: '',
+    weeklyHours: '',
+    gpmPercent: '',
+    w2Rate: '',
+    weeklyStipend: '',
+    notes: ''
+  });
+
+  const staffOptions = ["Scott Martindale", "Kevin Cano", "Andrew Temple", "Sarah Boggan"];
+  const specialtyOptions = [
+    "Special Education Teacher",
+    "Speech Language Pathologist", 
+    "OT",
+    "PT",
+    "School Psychologist",
+    "Social Worker",
+    "School Counselor",
+    "Paraprofessional"
+  ];
+
+  const getAssignmentStatus = (assignment) => {
+    const today = new Date();
+    const startDate = new Date(assignment.startDate);
+    const endDate = new Date(assignment.endDate);
+    
+    if (assignment.status === 'ended') {
+      return 'closed';
+    }
+    
+    if (startDate > today) {
+      return 'pending';
+    }
+    
+    if (endDate < today) {
+      return 'closed';
+    }
+    
+    if (startDate <= today && endDate >= today) {
+      return 'active';
+    }
+    
+    return 'closed';
+  };
+
+  const calculateWeeks = (start, end) => {
+    if (!start || !end) return 0;
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    return Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24 * 7));
+  };
+
+  const calculateRevenue = (rate, hours, weeks) => {
+    return rate * hours * weeks;
+  };
+
+  const calculateSimpleCosts = (w2Rate, weeklyHours, weeklyStipend) => {
+    const w2Wages = w2Rate * weeklyHours;
+    const totalCosts = w2Wages + (weeklyStipend || 0);
+    return {
+      w2Wages,
+      stipend: weeklyStipend || 0,
+      totalCosts
+    };
+  };
+
+  const weeklyProjections = useMemo(() => {
+    const weeks = [];
+    
+    let weekEnding = new Date('2025-08-01');
+    while (weekEnding.getDay() !== 5) {
+      weekEnding.setDate(weekEnding.getDate() + 1);
+    }
+    
+    const endDate = new Date('2026-08-31');
+    
+    while (weekEnding <= endDate && weeks.length < 52) {
+      const weekEndingStr = weekEnding.toISOString().split('T')[0];
+      
+      const activeAssignments = assignments.filter(assignment => {
+        const start = new Date(assignment.startDate);
+        const end = new Date(assignment.endDate);
+        return weekEnding >= start && weekEnding <= end;
+      });
+      
+      let projectedRevenue = 0;
+      let projectedProfit = 0;
+      
+      activeAssignments.forEach(assignment => {
+        const weeklyRev = assignment.billRate * assignment.weeklyHours;
+        projectedRevenue += weeklyRev;
+        projectedProfit += weeklyRev * (assignment.gpmPercent / 100);
+      });
+      
+      const projectedGPM = projectedRevenue > 0 ? (projectedProfit / projectedRevenue * 100) : 0;
+      
+      weeks.push({
+        weekEnding: weekEndingStr,
+        projectedRevenue,
+        projectedGPM,
+        headcount: activeAssignments.length
+      });
+      
+      weekEnding.setDate(weekEnding.getDate() + 7);
+    }
+    
+    return weeks;
+  }, [assignments]);
+
+  const getFilteredProjections = (timePeriod) => {
+    const today = new Date();
+    let startDate = new Date();
+    
+    switch(timePeriod) {
+      case 'weekly':
+        return weeklyProjections.slice(0, 12);
+      case '30days':
+        startDate.setDate(today.getDate() - 30);
+        break;
+      case '90days':
+        startDate.setDate(today.getDate() - 90);
+        break;
+      case '6months':
+        startDate.setMonth(today.getMonth() - 6);
+        break;
+      case 'yearly':
+        startDate.setFullYear(today.getFullYear() - 1);
+        break;
+      default:
+        return weeklyProjections.slice(0, 12);
+    }
+    
+    return weeklyProjections.filter(week => {
+      const weekDate = new Date(week.weekEnding);
+      return weekDate >= startDate;
+    });
+  };
+
+  const getPerformanceSummary = () => {
+    const filteredProjections = getFilteredProjections(selectedTimePeriod);
+    let totalRevenue = 0;
+    let totalProjectedProfit = 0;
+    let totalActualRevenue = 0;
+    let totalActualProfit = 0;
+    
+    filteredProjections.forEach(week => {
+      totalRevenue += week.projectedRevenue;
+      totalProjectedProfit += week.projectedRevenue * (week.projectedGPM / 100);
+      totalActualRevenue += 0; // No actual data yet
+      totalActualProfit += 0; // No actual data yet
+    });
+    
+    const avgProjectedGPM = totalRevenue > 0 ? (totalProjectedProfit / totalRevenue * 100) : 0;
+    const avgActualGPM = totalActualRevenue > 0 ? (totalActualProfit / totalActualRevenue * 100) : 0;
+    const gpmVariance = avgActualGPM - avgProjectedGPM;
+    
+    return {
+      totalRevenue,
+      avgProjectedGPM,
+      avgActualGPM,
+      gpmVariance
+    };
+  };
+
+  const filteredAssignments = useMemo(() => {
+    return assignments.filter(assignment => {
+      const matchesSearch = searchTerm === '' || 
+        assignment.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        assignment.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        assignment.recruiter.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        assignment.specialty.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const assignmentStatus = getAssignmentStatus(assignment);
+      const matchesStatus = filterStatus === 'all' || assignmentStatus === filterStatus;
+      const matchesSpecialty = filterSpecialty === 'all' || assignment.specialty === filterSpecialty;
+      
+      return matchesSearch && matchesStatus && matchesSpecialty;
+    });
+  }, [assignments, searchTerm, filterStatus, filterSpecialty]);
+
+  const summaryMetrics = useMemo(() => {
+    const totalProjectedRevenue = assignments.reduce((sum, assignment) => {
+      const weeks = calculateWeeks(assignment.startDate, assignment.endDate);
+      return sum + calculateRevenue(assignment.billRate, assignment.weeklyHours, weeks);
+    }, 0);
+    
+    const totalProjectedProfit = assignments.reduce((sum, assignment) => {
+      const weeks = calculateWeeks(assignment.startDate, assignment.endDate);
+      
+      if (assignment.w2Rate) {
+        const costs = calculateSimpleCosts(assignment.w2Rate, assignment.weeklyHours, assignment.weeklyStipend);
+        const weeklyProfit = (assignment.billRate * assignment.weeklyHours) - costs.totalCosts;
+        return sum + (weeklyProfit * weeks);
+      } else {
+        const revenue = calculateRevenue(assignment.billRate, assignment.weeklyHours, weeks);
+        return sum + (revenue * assignment.gpmPercent / 100);
+      }
+    }, 0);
+
+    const avgProjectedGPM = totalProjectedRevenue > 0 ? (totalProjectedProfit / totalProjectedRevenue) * 100 : 0;
+    
+    const assignmentCounts = assignments.reduce((counts, assignment) => {
+      const status = getAssignmentStatus(assignment);
+      counts[status] = (counts[status] || 0) + 1;
+      return counts;
+    }, { active: 0, pending: 0, closed: 0 });
+    
+    return {
+      totalProjectedRevenue,
+      totalProjectedProfit,
+      avgProjectedGPM,
+      activeAssignments: assignmentCounts.active,
+      pendingAssignments: assignmentCounts.pending,
+      closedAssignments: assignmentCounts.closed,
+      totalAssignments: assignments.length
+    };
+  }, [assignments]);
+
+  const breakdowns = useMemo(() => {
+    const bySpecialty = {};
+    
+    assignments.forEach(assignment => {
+      const weeks = calculateWeeks(assignment.startDate, assignment.endDate);
+      const revenue = calculateRevenue(assignment.billRate, assignment.weeklyHours, weeks);
+      
+      let profit;
+      if (assignment.w2Rate) {
+        const costs = calculateSimpleCosts(assignment.w2Rate, assignment.weeklyHours, assignment.weeklyStipend);
+        const weeklyProfit = (assignment.billRate * assignment.weeklyHours) - costs.totalCosts;
+        profit = weeklyProfit * weeks;
+      } else {
+        profit = revenue * assignment.gpmPercent / 100;
+      }
+      
+      if (!bySpecialty[assignment.specialty]) {
+        bySpecialty[assignment.specialty] = { revenue: 0, profit: 0, count: 0 };
+      }
+      bySpecialty[assignment.specialty].revenue += revenue;
+      bySpecialty[assignment.specialty].profit += profit;
+      bySpecialty[assignment.specialty].count += 1;
+    });
+
+    return { bySpecialty };
+  }, [assignments]);
+
+  const COLORS = ['#1E3A8A', '#2563EB', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
+
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  const handleAddAssignment = () => {
+    if (newAssignment.clientName && newAssignment.employeeName && newAssignment.recruiter && newAssignment.accountManager) {
+      const assignment = {
+        id: editingAssignment ? editingAssignment.id : Date.now(),
+        ...newAssignment,
+        billRate: parseFloat(newAssignment.billRate) || 0,
+        weeklyHours: parseFloat(newAssignment.weeklyHours) || 0,
+        gpmPercent: parseFloat(newAssignment.gpmPercent) || 0,
+        w2Rate: parseFloat(newAssignment.w2Rate) || 0,
+        weeklyStipend: parseFloat(newAssignment.weeklyStipend) || 0,
+        status: 'active'
+      };
+      
+      if (editingAssignment) {
+        setAssignments(assignments.map(a => a.id === editingAssignment.id ? assignment : a));
+      } else {
+        setAssignments([...assignments, assignment]);
+      }
+      
+      setNewAssignment({
+        clientName: '',
+        employeeName: '',
+        recruiter: '',
+        accountManager: '',
+        specialty: '',
+        startDate: '',
+        endDate: '',
+        billRate: '',
+        weeklyHours: '',
+        gpmPercent: '',
+        w2Rate: '',
+        weeklyStipend: '',
+        notes: ''
+      });
+      setEditingAssignment(null);
+      setShowForm(false);
+    } else {
+      alert('Please fill in all required fields');
+    }
+  };
+
+  const handleEditAssignment = (assignment) => {
+    setEditingAssignment(assignment);
+    setNewAssignment({
+      clientName: assignment.clientName,
+      employeeName: assignment.employeeName,
+      recruiter: assignment.recruiter,
+      accountManager: assignment.accountManager,
+      specialty: assignment.specialty,
+      startDate: assignment.startDate,
+      endDate: assignment.endDate,
+      billRate: assignment.billRate.toString(),
+      weeklyHours: assignment.weeklyHours.toString(),
+      gpmPercent: assignment.gpmPercent.toString(),
+      w2Rate: assignment.w2Rate.toString(),
+      weeklyStipend: assignment.weeklyStipend.toString(),
+      notes: assignment.notes || ''
+    });
+    setShowForm(true);
+  };
+
+  const handleDeleteAssignment = (assignmentId) => {
+    if (window.confirm('Are you sure you want to delete this assignment?')) {
+      setAssignments(assignments.filter(a => a.id !== assignmentId));
+    }
+  };
+
+  const exportData = () => {
+    const data = {
+      assignments,
+      weeklyActuals,
+      exportDate: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sevn-staffing-data-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const importData = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.assignments) {
+            setAssignments(data.assignments);
+          }
+          if (data.weeklyActuals) {
+            setWeeklyActuals(data.weeklyActuals);
+          }
+          alert('Data imported successfully!');
+        } catch (error) {
+          alert('Error importing data. Please check the file format.');
+        }
+      };
+      reader.readAsText(file);
+    }
+    event.target.value = '';
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
+      <div className="max-w-7xl mx-auto">
+        
+        {/* Enhanced Header */}
+        <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-blue-700 rounded-xl shadow-xl p-6 mb-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between">
+            <div className="flex items-center mb-4 sm:mb-0">
+              <div className="bg-white rounded-lg p-3 mr-4 shadow-md">
+                <div className="text-blue-900 font-bold text-2xl">SEVN</div>
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-white mb-1">Workforce Solutions</h1>
+                <p className="text-blue-100">Advanced Revenue & Performance Tracker</p>
+              </div>
+            </div>
+            <div className="text-center sm:text-right">
+              <p className="text-blue-100 text-sm">Dashboard</p>
+              <p className="text-white font-semibold">{new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={exportData}
+                  className="text-xs bg-white/20 text-white px-3 py-2 rounded-lg hover:bg-white/30 transition-colors flex items-center gap-1"
+                >
+                  <Download className="h-3 w-3" />
+                  Export
+                </button>
+                <label className="text-xs bg-white/20 text-white px-3 py-2 rounded-lg hover:bg-white/30 transition-colors cursor-pointer flex items-center gap-1">
+                  <Upload className="h-3 w-3" />
+                  Import
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={importData}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Enhanced Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 sm:gap-6 mb-6">
+          <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-600 transform hover:scale-105 transition-transform">
+            <div className="flex items-center">
+              <div className="p-3 bg-gradient-to-br from-blue-100 to-blue-50 rounded-xl">
+                <DollarSign className="h-6 w-6 text-blue-700" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm text-gray-600">Total Revenue</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(summaryMetrics.totalProjectedRevenue)}</p>
+                <p className="text-xs font-medium text-blue-600">Projected</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-600 transform hover:scale-105 transition-transform">
+            <div className="flex items-center">
+              <div className="p-3 bg-gradient-to-br from-purple-100 to-purple-50 rounded-xl">
+                <Target className="h-6 w-6 text-purple-700" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm text-gray-600">Average GPM</p>
+                <p className="text-2xl font-bold text-gray-900">{summaryMetrics.avgProjectedGPM.toFixed(1)}%</p>
+                <p className="text-xs font-medium text-purple-600">Projected</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-600 transform hover:scale-105 transition-transform">
+            <div className="flex items-center">
+              <div className="p-3 bg-gradient-to-br from-green-100 to-green-50 rounded-xl">
+                <Users className="h-6 w-6 text-green-700" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm text-gray-600">Active</p>
+                <p className="text-2xl font-bold text-gray-900">{summaryMetrics.activeAssignments}</p>
+                <p className="text-xs font-medium text-green-600">Currently Working</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-yellow-600 transform hover:scale-105 transition-transform">
+            <div className="flex items-center">
+              <div className="p-3 bg-gradient-to-br from-yellow-100 to-yellow-50 rounded-xl">
+                <Calendar className="h-6 w-6 text-yellow-700" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm text-gray-600">Pending</p>
+                <p className="text-2xl font-bold text-gray-900">{summaryMetrics.pendingAssignments}</p>
+                <p className="text-xs font-medium text-yellow-600">Not Started</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-gray-600 transform hover:scale-105 transition-transform">
+            <div className="flex items-center">
+              <div className="p-3 bg-gradient-to-br from-gray-100 to-gray-50 rounded-xl">
+                <StopCircle className="h-6 w-6 text-gray-700" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm text-gray-600">Closed</p>
+                <p className="text-2xl font-bold text-gray-900">{summaryMetrics.closedAssignments}</p>
+                <p className="text-xs font-medium text-gray-600">Completed/Ended</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-indigo-600 transform hover:scale-105 transition-transform">
+            <div className="flex items-center">
+              <div className="p-3 bg-gradient-to-br from-indigo-100 to-indigo-50 rounded-xl">
+                <BarChart3 className="h-6 w-6 text-indigo-700" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm text-gray-600">Total</p>
+                <p className="text-2xl font-bold text-gray-900">{summaryMetrics.totalAssignments}</p>
+                <p className="text-xs font-medium text-indigo-600">All Assignments</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Enhanced Navigation */}
+        <div className="bg-white rounded-xl shadow-lg mb-6 overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-800 to-blue-600 px-2 py-1"></div>
+          <div className="border-b border-gray-200">
+            <nav className="flex space-x-0 overflow-x-auto">
+              {[
+                { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+                { key: 'assignments', label: 'Assignments', icon: Users },
+                { key: 'analytics', label: 'Analytics', icon: TrendingUp },
+                { key: 'actuals', label: 'Actuals', icon: Target }
+              ].map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`flex items-center px-6 py-4 border-b-3 font-medium text-sm whitespace-nowrap transition-all duration-200 ${
+                    activeTab === key
+                      ? 'border-blue-600 text-blue-700 bg-gradient-to-t from-blue-50 to-transparent shadow-inner'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                  style={{ borderBottomWidth: '3px' }}
+                >
+                  <Icon className="h-4 w-4 mr-2" />
+                  {label}
+                </button>
+              ))}
+            </nav>
+          </div>
+        </div>
+
+        {/* Dashboard Tab */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-indigo-600">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Assignment Status Overview</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-medium text-green-800">Active Assignments</h4>
+                    <span className="text-2xl font-bold text-green-700">{summaryMetrics.activeAssignments}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {assignments
+                      .filter(a => getAssignmentStatus(a) === 'active')
+                      .slice(0, 3)
+                      .map(assignment => (
+                        <div key={assignment.id} className="text-sm text-green-700 bg-white rounded px-2 py-1">
+                          <div className="font-medium">{assignment.employeeName}</div>
+                          <div className="text-xs text-green-600">{assignment.clientName}</div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+
+                <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-medium text-yellow-800">Pending Assignments</h4>
+                    <span className="text-2xl font-bold text-yellow-700">{summaryMetrics.pendingAssignments}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {summaryMetrics.pendingAssignments === 0 && (
+                      <div className="text-sm text-yellow-600 text-center italic">No pending assignments</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-medium text-gray-800">Recently Closed</h4>
+                    <span className="text-2xl font-bold text-gray-700">{summaryMetrics.closedAssignments}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {summaryMetrics.closedAssignments === 0 && (
+                      <div className="text-sm text-gray-600 text-center italic">No closed assignments</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-blue-700">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance Trends</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={weeklyProjections.slice(0, 12)}>
+                    <defs>
+                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                    <XAxis 
+                      dataKey="weekEnding" 
+                      tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} 
+                    />
+                    <YAxis tickFormatter={(value) => formatCurrency(value)} />
+                    <Tooltip 
+                      formatter={(value) => formatCurrency(value)}
+                      labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                    />
+                    <Area type="monotone" dataKey="projectedRevenue" stroke="#3B82F6" fillOpacity={1} fill="url(#colorRevenue)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-green-600">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue Distribution</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={Object.entries(breakdowns.bySpecialty).map(([specialty, data]) => ({
+                        name: specialty.length > 15 ? specialty.substring(0, 15) + '...' : specialty,
+                        value: data.revenue,
+                        count: data.count
+                      }))}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="value"
+                      label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {Object.keys(breakdowns.bySpecialty).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => formatCurrency(value)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Assignments Tab */}
+        {activeTab === 'assignments' && (
+          <div>
+            <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border-t-4 border-blue-700">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+                <h2 className="text-xl font-bold text-gray-800">Assignment Management</h2>
+                
+                <div className="flex flex-wrap gap-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search assignments..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="pending">Pending</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                  
+                  <button
+                    onClick={() => setShowForm(!showForm)}
+                    className="flex items-center px-4 py-2 bg-gradient-to-r from-blue-700 to-blue-600 text-white rounded-lg hover:from-blue-800 hover:to-blue-700 transition-all shadow-md"
+                  >
+                    <Plus className={`h-4 w-4 mr-2 transform transition-transform ${showForm ? 'rotate-45' : ''}`} />
+                    Add Assignment
+                  </button>
+                </div>
+              </div>
+              
+              {showForm && (
+                <div className="mt-6 p-6 bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl border border-blue-200">
+                  <h3 className="text-lg font-semibold text-blue-900 mb-4">
+                    {editingAssignment ? 'Edit Assignment' : 'Add New Assignment'}
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Client Name *</label>
+                      <input
+                        type="text"
+                        value={newAssignment.clientName}
+                        onChange={(e) => setNewAssignment({...newAssignment, clientName: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter client name"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Employee Name *</label>
+                      <input
+                        type="text"
+                        value={newAssignment.employeeName}
+                        onChange={(e) => setNewAssignment({...newAssignment, employeeName: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter employee name"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-blue-700 mb-1">Recruiter *</label>
+                      <select
+                        value={newAssignment.recruiter}
+                        onChange={(e) => setNewAssignment({...newAssignment, recruiter: e.target.value})}
+                        className="w-full px-3 py-2 border-2 border-blue-300 bg-blue-50 rounded-md focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select Recruiter</option>
+                        {staffOptions.map(staff => (
+                          <option key={staff} value={staff}>{staff}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-green-700 mb-1">Account Manager *</label>
+                      <select
+                        value={newAssignment.accountManager}
+                        onChange={(e) => setNewAssignment({...newAssignment, accountManager: e.target.value})}
+                        className="w-full px-3 py-2 border-2 border-green-300 bg-green-50 rounded-md focus:ring-2 focus:ring-green-500"
+                      >
+                        <option value="">Select Account Manager</option>
+                        {staffOptions.map(staff => (
+                          <option key={staff} value={staff}>{staff}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Bill Rate ($/hr)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={newAssignment.billRate}
+                        onChange={(e) => setNewAssignment({...newAssignment, billRate: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                        placeholder="120.00"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Weekly Hours</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={newAssignment.weeklyHours}
+                        onChange={(e) => setNewAssignment({...newAssignment, weeklyHours: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                        placeholder="40"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={handleAddAssignment}
+                      className="bg-gradient-to-r from-blue-700 to-blue-600 text-white px-6 py-2 rounded-lg hover:from-blue-800 hover:to-blue-700 transition-all shadow-md font-medium"
+                    >
+                      {editingAssignment ? 'Update Assignment' : 'Add Assignment'}
+                    </button>
+                    <button
+                      onClick={() => setShowForm(false)}
+                      className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors font-medium"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden border-t-4 border-blue-700">
+              <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-blue-50 border-b">
+                <h2 className="text-xl font-bold text-gray-800">
+                  Current Assignments ({filteredAssignments.length})
+                </h2>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredAssignments.map((assignment) => {
+                      const assignmentStatus = getAssignmentStatus(assignment);
+                      
+                      return (
+                        <tr key={assignment.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{assignment.employeeName}</div>
+                              <div className="text-xs text-gray-500">{assignment.specialty}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {assignment.clientName}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-xs">
+                              <div className="text-blue-600 font-medium">R: {assignment.recruiter.split(' ')[0]}</div>
+                              <div className="text-green-600 font-medium">AM: {assignment.accountManager.split(' ')[0]}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              assignmentStatus === 'active' ? 'bg-green-100 text-green-800' :
+                              assignmentStatus === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {assignmentStatus === 'active' ? 'Active' :
+                               assignmentStatus === 'pending' ? 'Pending' :
+                               'Closed'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => handleEditAssignment(assignment)}
+                                className="text-blue-600 hover:text-blue-900 transition-colors p-1 rounded hover:bg-blue-50"
+                                title="Edit Assignment"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteAssignment(assignment.id)}
+                                className="text-red-600 hover:text-red-900 transition-colors p-1 rounded hover:bg-red-50"
+                                title="Delete Assignment"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Analytics Tab */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-purple-600">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold text-gray-800">Performance Analytics</h2>
+                <div className="flex gap-2">
+                  {['weekly', '30days', '90days'].map(period => (
+                    <button
+                      key={period}
+                      onClick={() => setSelectedTimePeriod(period)}
+                      className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                        selectedTimePeriod === period
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {period === 'weekly' ? 'Weekly' :
+                       period === '30days' ? '30 Days' : '90 Days'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {(() => {
+                const summaryData = getPerformanceSummary();
+                return (
+                  <>
+                    <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-600">
+                      <div className="flex items-center">
+                        <div className="p-3 bg-blue-100 rounded-xl">
+                          <DollarSign className="h-6 w-6 text-blue-700" />
+                        </div>
+                        <div className="ml-4">
+                          <p className="text-sm text-gray-600">Total Revenue</p>
+                          <p className="text-xl font-bold text-gray-900">{formatCurrency(summaryData.totalRevenue)}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-600">
+                      <div className="flex items-center">
+                        <div className="p-3 bg-green-100 rounded-xl">
+                          <TrendingUp className="h-6 w-6 text-green-700" />
+                        </div>
+                        <div className="ml-4">
+                          <p className="text-sm text-gray-600">Avg GPM</p>
+                          <p className="text-xl font-bold text-gray-900">{summaryData.avgProjectedGPM.toFixed(1)}%</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-600">
+                      <div className="flex items-center">
+                        <div className="p-3 bg-purple-100 rounded-xl">
+                          <Target className="h-6 w-6 text-purple-700" />
+                        </div>
+                        <div className="ml-4">
+                          <p className="text-sm text-gray-600">Actual GPM</p>
+                          <p className="text-xl font-bold text-gray-900">{summaryData.avgActualGPM.toFixed(1)}%</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-orange-600">
+                      <div className="flex items-center">
+                        <div className="p-3 bg-orange-100 rounded-xl">
+                          <Users className="h-6 w-6 text-orange-700" />
+                        </div>
+                        <div className="ml-4">
+                          <p className="text-sm text-gray-600">GPM Variance</p>
+                          <p className="text-xl font-bold text-gray-900">{summaryData.gpmVariance.toFixed(1)}%</p>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-blue-600">
+              <h3 className="text-lg font-semibold text-gray-900 mb-6">Revenue Performance Trends</h3>
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={getFilteredProjections(selectedTimePeriod).map(week => ({
+                  weekEnding: new Date(week.weekEnding).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                  projectedRevenue: week.projectedRevenue / 1000,
+                  projectedGPM: week.projectedGPM
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="weekEnding" />
+                  <YAxis yAxisId="revenue" orientation="left" tickFormatter={(value) => `${value}k`} />
+                  <YAxis yAxisId="gpm" orientation="right" domain={[0, 50]} tickFormatter={(value) => `${value}%`} />
+                  <Tooltip />
+                  <Legend />
+                  <Line yAxisId="revenue" type="monotone" dataKey="projectedRevenue" stroke="#3B82F6" strokeWidth={3} name="Revenue ($k)" />
+                  <Line yAxisId="gpm" type="monotone" dataKey="projectedGPM" stroke="#8B5CF6" strokeWidth={2} name="GPM %" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* Actuals Tab */}
+        {activeTab === 'actuals' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-lg p-6 border-t-4 border-blue-700">
+              <h2 className="text-xl font-bold text-gray-800 mb-4">Weekly Actuals Entry</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Week Ending (Friday)</label>
+                  <select
+                    value={selectedWeek}
+                    onChange={(e) => setSelectedWeek(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Choose a week ending date...</option>
+                    {(() => {
+                      const weeks = [];
+                      const startDate = new Date('2025-08-01');
+                      
+                      while (startDate.getDay() !== 5) {
+                        startDate.setDate(startDate.getDate() + 1);
+                      }
+                      
+                      for (let i = 0; i < 20; i++) {
+                        const friday = new Date(startDate);
+                        friday.setDate(startDate.getDate() + (i * 7));
+                        const fridayStr = friday.toISOString().split('T')[0];
+                        
+                        const activeCount = assignments.filter(assignment => {
+                          const assignmentStart = new Date(assignment.startDate);
+                          const assignmentEnd = new Date(assignment.endDate);
+                          return friday >= assignmentStart && friday <= assignmentEnd;
+                        }).length;
+                        
+                        if (activeCount > 0) {
+                          weeks.push(
+                            <option key={fridayStr} value={fridayStr}>
+                              {friday.toLocaleDateString('en-US', { 
+                                weekday: 'long', 
+                                month: 'short', 
+                                day: 'numeric', 
+                                year: 'numeric' 
+                              })} ({activeCount} assignments)
+                            </option>
+                          );
+                        }
+                      }
+                      return weeks;
+                    })()}
+                  </select>
+                </div>
+                
+                {selectedWeek && (
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h4 className="font-medium text-blue-800 mb-2">Week Summary</h4>
+                    <div className="text-sm text-blue-700">
+                      <div>Week ending: {new Date(selectedWeek).toLocaleDateString()}</div>
+                      <div>Active assignments: {assignments.filter(assignment => {
+                        const weekDate = new Date(selectedWeek);
+                        const assignmentStart = new Date(assignment.startDate);
+                        const assignmentEnd = new Date(assignment.endDate);
+                        return weekDate >= assignmentStart && weekDate <= assignmentEnd;
+                      }).length}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {selectedWeek && (
+              <div className="bg-white rounded-xl shadow-lg overflow-hidden border-t-4 border-green-600">
+                <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-green-50 border-b">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Actuals for Week Ending {new Date(selectedWeek).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </h3>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Employee</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Projected Hrs</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actual Hrs</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Variance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {assignments.filter(assignment => {
+                        const weekDate = new Date(selectedWeek);
+                        const assignmentStart = new Date(assignment.startDate);
+                        const assignmentEnd = new Date(assignment.endDate);
+                        return weekDate >= assignmentStart && weekDate <= assignmentEnd;
+                      }).map(assignment => {
+                        const actualData = weeklyActuals[selectedWeek]?.[assignment.id] || {};
+                        const actualHours = parseFloat(actualData.actualHours) || 0;
+                        const projectedHours = assignment.weeklyHours;
+                        const variance = actualHours - projectedHours;
+                        
+                        return (
+                          <tr key={assignment.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3">
+                              <div className="text-sm font-medium text-gray-900">{assignment.employeeName}</div>
+                              <div className="text-xs text-gray-500">{assignment.specialty}</div>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{assignment.clientName}</td>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{projectedHours}</td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={actualHours || ''}
+                                onChange={(e) => {
+                                  const newActuals = {
+                                    ...weeklyActuals,
+                                    [selectedWeek]: {
+                                      ...weeklyActuals[selectedWeek],
+                                      [assignment.id]: {
+                                        ...actualData,
+                                        actualHours: e.target.value
+                                      }
+                                    }
+                                  };
+                                  setWeeklyActuals(newActuals);
+                                }}
+                                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                placeholder="0"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`text-sm font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {variance >= 0 ? '+' : ''}{variance.toFixed(1)}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default EnhancedStaffingTracker;
